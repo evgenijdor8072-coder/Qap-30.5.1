@@ -1,0 +1,56 @@
+import pytest
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.chrome.options import Options
+
+@pytest.fixture(scope="function")
+def driver():
+    """Фикстура для создания и закрытия драйвера"""
+    chrome_options = Options()
+    chrome_options.add_argument("--start-maximized")
+    chrome_options.add_argument("--disable-notifications")
+    
+    driver = webdriver.Chrome(
+        service=Service(ChromeDriverManager().install()),
+        options=chrome_options
+    )
+    
+    driver.get("https://pet-friends/all_pets")
+    
+    yield driver
+    
+    driver.quit()
+
+def run_all_pets_tests():
+    """Запуск всех тестов для проверки питомцев"""
+    # Создаём экземпляры тестовых классов
+    test_cards = TestUserPetsPageWithImplicitWaits()
+    test_table = TestUserPetsTableWithExplicitWaits()
+    
+    from selenium import webdriver
+    driver = webdriver.Chrome()
+    
+    try:
+        print("=== ТЕСТИРОВАНИЕ КАРТОЧЕК ПИТОМЦЕВ ===")
+        driver.get("https://site.com/pets/cards")
+        test_cards.setup_method()
+        test_cards.test_all_pets_are_present(driver)
+        test_cards.test_at_least_half_of_pets_have_photos(driver)
+        test_cards.test_all_pets_have_name_age_breed(driver)
+        test_cards.test_all_pets_have_different_names(driver)
+        test_cards.test_no_duplicate_pets(driver)
+        test_cards.teardown_method()
+        
+        print("\n=== ТЕСТИРОВАНИЕ ТАБЛИЦЫ ПИТОМЦЕВ ===")
+        driver.get("https://site.com/pets/table")
+        test_table.test_all_pets_in_table(driver)
+        test_table.test_table_specific_checks(driver)
+        
+        print("\n Все тесты успешно пройдены!")
+        
+    finally:
+        driver.quit()
+
+if __name__ == "__main__":
+    run_all_pets_tests()
