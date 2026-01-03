@@ -1,0 +1,139 @@
+import pytest
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException, NoSuchElementException
+
+class TestUserPetsPageWithImplicitWaits:
+    """Тест со списком питомцев в виде карточек с НЕЯВНЫМИ ожиданиями"""
+    
+    def setup_method(self):
+        """Настройка неявных ожиданий перед каждым тестом"""
+        self.driver.implicitly_wait(10)
+    
+    def teardown_method(self):
+        """Сброс неявных ожиданий после каждого теста"""
+        # Возвращаем значение по умолчанию
+        self.driver.implicitly_wait(0)
+    
+    def test_all_pets_are_present(self, driver):
+        """Тест 1: Присутствуют все питомцы."""
+        self.driver = driver
+        
+        pets = self.driver.find_elements(By.CSS_SELECTOR, ".pet-card")
+        assert len(pets) > 0, "На странице нет питомцев"
+        
+        print(f"Найдено {len(pets)} питомцев на странице")
+    
+    def test_at_least_half_of_pets_have_photos(self, driver):
+        """Тест 2: Хотя бы у половины питомцев есть фото."""
+        self.driver = driver
+        pets = self.driver.find_elements(By.CSS_SELECTOR, ".pet-card")
+        photo_count = 0
+        
+        for pet in pets:
+            try:
+                img = pet.find_element(By.TAG_NAME, "img")
+                src = img.get_attribute("src")
+                
+                if src and src != "" and "placeholder" not in src:
+                    # Дополнительная проверка через JavaScript с неявным ожиданием
+                    is_loaded = self.driver.execute_script("""
+                        return arguments[0].complete && 
+                               typeof arguments[0].naturalWidth != "undefined" && 
+                               arguments[0].naturalWidth > 0
+                    """, img)
+                    
+                    if is_loaded:
+                        photo_count += 1
+            except NoSuchElementException:
+                continue  # У этого питомца нет фото
+        
+        total_pets = len(pets)
+        required = total_pets / 2
+        assert photo_count >= required, \
+            f"Фото есть только у {photo_count} из {total_pets} питомцев. " \
+            f"Требуется хотя бы у {required:.1f}"
+        
+        print(f"Фото есть у {photo_count} из {total_pets} питомцев ({photo_count/total_pets*100:.1f}%)")
+    
+    def test_all_pets_have_name_age_breed(self, driver):
+        """Тест 3: У всех питомцев есть имя, возраст и порода."""
+        self.driver = driver
+        pets = self.driver.find_elements(By.CSS_SELECTOR, ".pet-card")
+        
+        for i, pet in enumerate(pets, 1):
+            try:
+                name_element = pet.find_element(By.CSS_SELECTOR, "h5, .pet-name, [data-test='pet-name']")
+                name = name_element.text.strip()
+                assert name != "", f"У питомца {i} отсутствует имя"
+                
+                try:
+                    age_element = pet.find_element(By.XPATH, ".//p[contains(text(), 'Возраст') or contains(text(), 'Age')]")
+                except NoSuchElementException:
+                    age_element = pet.find_element(By.CSS_SELECTOR, ".pet-age, [data-test='pet-age']")
+                
+                age_text = age_element.text
+                age = ''.join(filter(str.isdigit, age_text))
+                assert age != "", f"У питомца {i} отсутствует возраст (текст: '{age_text}')"
+                
+                try:
+                    breed_element = pet.find_element(By.XPATH, ".//p[contains(text(), 'Порода') or contains(text(), 'Breed')]")
+                except NoSuchElementException:
+                    breed_element = pet.find_element(By.CSS_SELECTOR, ".pet-breed, [data-test='pet-breed']")
+                
+                breed = breed_element.text.replace("Порода:", "").replace("Breed:", "").strip()
+                assert breed != "", f"У питомца {i} отсутствует порода"
+                
+                print(f"Питомец {i}: {name}, {age} лет, порода: {breed}")
+                
+            except NoSuchElementException as e:
+                pytest.fail(f"Не удалось найти данные для питомца {i}: {str(e)}")
+    
+    def test_all_pets_have_different_names(self, driver):
+        """Тест 4: У всех питомцев разные имена."""
+        self.driver = driver
+        pets = self.driver.find_elements(By.CSS_SELECTOR, ".pet-card")
+        names = []
+        
+        for pet in pets:
+            name_element = pet.find_element(By.CSS_SELECTOR, "h5, .pet-name")
+            name = name_element.text.strip()
+            names.append(name)
+        
+        unique_names = set(names)
+        if len(names) != len(unique_names):
+            duplicates = [name for name in names if names.count(name) > 1]
+            pytest.fail(f"Найдены повторяющиеся имена: {set(duplicates)}")
+        
+        print(f"Все {len(names)} имён уникальны")
+    
+    def test_no_duplicate_pets(self, driver):
+        """Тест 5: В списке нет повторяющихся питомцев."""
+        self.driver = driver
+        pets = self.driver.find_elements(By.CSS_SELECTOR, ".pet-card")
+        pets_data = []
+        
+        for pet in pets:
+            name_element = pet.find_element(By.CSS_SELECTOR, "h5")
+            name = name_element.text.strip()
+            
+            age_element = pet.find_element(By.XPATH, ".//p[contains(text(), 'Возраст')]")
+            age = age_element.text.replace("Возраст:", "").strip()
+            
+            breed_element = pet.find_element(By.XPATH, ".//p[contains(text(), 'Порода')]")
+            breed = breed_element.text.replace("Порода:", "").strip()
+            
+            pets_data.append((name, age, breed))
+        
+        seen = set()
+        duplicates = []
+        
+        for pet_data in pets_data:
+            if pet_data in seen:
+                duplicates.append(pet_data)
+            seen.add(pet_data)
+        
+        assert len(duplicates) == 0, f"Найдены повторяющиеся питомцы: {duplicates}"
+        
+        print(f"Проверено {len(pets_data)} питомцев, дубликатов не найдено")
