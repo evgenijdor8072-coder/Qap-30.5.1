@@ -1,0 +1,140 @@
+class TestUserPetsTableWithExplicitWaits:
+    """Тест со списком питомцев в виде таблицы с ЯВНЫМИ ожиданиями"""
+    
+    def test_all_pets_in_table(self, driver):
+        """Основной тест для табличной структуры с явными ожиданиями"""
+        self.driver = driver
+        wait = WebDriverWait(self.driver, 15, poll_frequency=0.5)
+        
+        print("Ожидаю загрузку таблицы...")
+        table = wait.until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, "table.table, table.pets-table, table"))
+        )
+        
+        print("Ожидаю загрузку данных...")
+        rows = wait.until(
+            lambda d: d.find_elements(By.CSS_SELECTOR, "table tbody tr") 
+            and len(d.find_elements(By.CSS_SELECTOR, "table tbody tr")) > 0
+        )
+        
+        rows = wait.until(
+            EC.presence_of_all_elements_located((By.CSS_SELECTOR, "table tbody tr"))
+        )
+        
+        assert len(rows) > 0, "В таблице нет данных о питомцах"
+        print(f"В таблице найдено {len(rows)} питомцев")
+        
+        print("Проверяю фото питомцев...")
+        valid_photos_count = 0
+        
+        for i, row in enumerate(rows, 1):
+            try:
+                photo_cell = wait.until(
+                    EC.presence_of_element_located((By.CSS_SELECTOR, f"table tbody tr:nth-child({i}) td:nth-child(1)"))
+                )
+                
+                img = wait.until(
+                    EC.presence_of_element_located((By.TAG_NAME, "img")),
+                    message=f"Не найдено изображение в строке {i}"
+                )
+                
+                wait.until(
+                    lambda d: d.execute_script("""
+                        return arguments[0].complete && 
+                               typeof arguments[0].naturalWidth != "undefined" && 
+                               arguments[0].naturalWidth > 0
+                    """, img) or True  # Игнорируем таймаут для изображений, которые могут не загрузиться
+                )
+                
+                src = img.get_attribute("src")
+                if src and src != "" and "placeholder" not in src:
+                    valid_photos_count += 1
+                    
+            except TimeoutException:
+                print(f"Фото для питомца {i} не загружено или отсутствует")
+                continue
+        
+        assert valid_photos_count >= len(rows) / 2, \
+            f"Фото есть только у {valid_photos_count} из {len(rows)} питомцев"
+        print(f"Фото есть у {valid_photos_count} из {len(rows)} питомцев")
+        
+        print("Проверяю данные питомцев...")
+        names, ages, breeds = [], [], []
+        
+        for i, row in enumerate(rows, 1):
+            cells = wait.until(
+                lambda d: row.find_elements(By.TAG_NAME, "td") 
+                and len(row.find_elements(By.TAG_NAME, "td")) >= 4
+            )
+            
+            name_cell = wait.until(
+                EC.visibility_of(cells[1]),
+                message=f"Ячейка с именем в строке {i} не видима"
+            )
+            name = name_cell.text.strip()
+            names.append(name)
+            assert name != "", f"У питомца в строке {i} отсутствует имя"
+            
+            age_cell = wait.until(
+                EC.visibility_of(cells[2]),
+                message=f"Ячейка с возрастом в строке {i} не видима"
+            )
+            age = age_cell.text.strip()
+            ages.append(age)
+            assert age != "", f"У питомца в строке {i} отсутствует возраст"
+            
+            breed_cell = wait.until(
+                EC.visibility_of(cells[3]),
+                message=f"Ячейка с породой в строке {i} не видима"
+            )
+            breed = breed_cell.text.strip()
+            breeds.append(breed)
+            assert breed != "", f"У питомца в строке {i} отсутствует порода"
+            
+            print(f"Строка {i}: {name}, {age}, {breed}")
+        
+        # Проверка 4: Уникальность имен
+        print("Проверяю уникальность имён...")
+        unique_names = set(names)
+        assert len(names) == len(unique_names), \
+            f"Найдены повторяющиеся имена: {[n for n in names if names.count(n) > 1]}"
+        
+        # Проверка 5: Нет дубликатов питомцев
+        print("Проверяю на дубликаты...")
+        pets_data = list(zip(names, ages, breeds))
+        pets_set = set(pets_data)
+        
+        if len(pets_set) != len(pets_data):
+            seen = {}
+            duplicates = []
+            for i, pet in enumerate(pets_data):
+                if pet in seen:
+                    duplicates.append(f"Строка {seen[pet]+1} и строка {i+1}: {pet}")
+                else:
+                    seen[pet] = i
+            
+            pytest.fail(f"Найдены дубликаты питомцев:\n" + "\n".join(duplicates))
+        
+        print("Все проверки пройдены успешно!")
+    
+    def test_table_specific_checks(self, driver):
+        """Дополнительные проверки для таблицы с явными ожиданиями"""
+        self.driver = driver
+        wait = WebDriverWait(self.driver, 10)
+        
+        table_header = wait.until(
+            EC.visibility_of_element_located((By.CSS_SELECTOR, "table thead"))
+        )
+        assert table_header.is_displayed(), "Заголовок таблицы не отображается"
+        
+        expected_headers = ["Фото", "Имя", "Возраст", "Порода"]
+        headers = wait.until(
+            EC.presence_of_all_elements_located((By.CSS_SELECTOR, "table thead th"))
+        )
+        
+        for i, (header, expected) in enumerate(zip(headers, expected_headers)):
+            header_text = header.text.strip()
+            assert expected in header_text, \
+                f"Заголовок столбца {i+1} не соответствует. Ожидалось '{expected}', получено '{header_text}'"
+        
+        print("Заголовки таблицы корректны")
